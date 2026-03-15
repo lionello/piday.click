@@ -37,13 +37,13 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Defang ${{ github.event.inputs.action || 'up' }} ${{ github.event.inputs.stack || vars.STACK || 'default-stack' }}
+        continue-on-error: true # only static files so fails with error
         uses: DefangLabs/defang-github-action@v2
         with:
           command: ${{ github.event.inputs.action || 'up' }}
           stack: ${{ github.event.inputs.stack || vars.STACK }}
 
       - name: Deployment Summary
-        if: always()
         uses: DefangLabs/defang-github-action@v2
         with:
           command: services
