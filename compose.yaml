@@ -1,0 +1,7 @@
+services:
+  piday:
+    domainname: piday.click
+    build: .
+    ports: [80]
+    x-defang-static-files: /usr/share/nginx/html
+    x-defang-dns-role: arn:aws:iam::180162796851:role/dnsadmin-eb7ec3a

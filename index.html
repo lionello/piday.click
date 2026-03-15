@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>π Pixel PNG</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>π</text></svg>">
+<style>
+* { box-sizing: border-box; margin: 0; }
+html, body { height: 100%; overflow: hidden; }
+body { font-family: system-ui, sans-serif; background: #000; color: #ddd; }
+
+/* PNG fills entire background */
+#bg-img {
+  position: fixed; inset: 0; z-index: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  object-position: left top;
+  image-rendering: pixelated;
+}
+
+/* UI overlay — centered */
+#ui {
+  position: fixed; inset: 0; z-index: 1;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  opacity: 1; transition: opacity 0.3s;
+}
+#ui.faded { opacity: 0; }
+#panel {
+  pointer-events: auto;
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 20px 24px;
+  display: flex; flex-direction: column; gap: 14px;
+  align-items: center;
+  max-width: 360px; width: 90vw;
+}
+#panel h1 { font-size: 1.3em; font-weight: 600; letter-spacing: 0.02em; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; align-items: end; width: 100%; }
+.field { display: flex; flex-direction: column; gap: 3px; }
+.field span { font-size: 11px; color: #999; text-transform: uppercase; letter-spacing: 0.05em; }
+.field input[type="color"] { width: 80px; height: 36px; padding: 2px; cursor: pointer; border-radius: 6px; border: 1px solid rgba(255,255,255,0.15); }
+#status { font-size: 12px; color: #777; min-height: 1.2em; text-align: center; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+.actions button {
+  padding: 8px 18px; border: none; border-radius: 6px;
+  font-size: 13px; cursor: pointer; font-weight: 500;
+}
+#btn-save { background: #3b82f6; color: #fff; }
+#btn-save:hover { background: #2563eb; }
+#btn-random, #btn-toggle { background: rgba(255,255,255,0.1); color: #ccc; padding: 8px 14px; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; font-weight: 500; }
+#btn-random:hover, #btn-toggle:hover { background: rgba(255,255,255,0.18); }
+
+/* Magnifier loupe */
+#loupe {
+  position: fixed; z-index: 2;
+  pointer-events: none;
+  width: 160px; height: 160px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-radius: 50%;
+  overflow: hidden;
+  display: none;
+  box-shadow: 0 0 20px rgba(0,0,0,0.6);
+}
+#loupe canvas {
+  image-rendering: pixelated;
+  width: 100%; height: 100%;
+}
+</style>
+</head>
+<body>
+
+<img id="bg-img" alt="π digits">
+<div id="loupe"><canvas></canvas></div>
+
+<div id="ui">
+  <div id="panel">
+    <h1>π Pixel PNG</h1>
+    <input type="hidden" id="w">
+    <input type="hidden" id="h">
+    <div class="row">
+      <div class="field"><span>Foreground</span><input type="color" id="fg" value="#ffffff"></div>
+      <button id="btn-random">Random</button>
+      <div class="field"><span>Background</span><input type="color" id="bg" value="#000000"></div>
+    </div>
+    <div id="status"></div>
+    <div class="actions">
+      <button id="btn-save">Save PNG</button>
+      <button id="btn-toggle">Hide UI</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $w=document.getElementById('w'), $h=document.getElementById('h'),
+      $fg=document.getElementById('fg'), $bg=document.getElementById('bg'),
+      $status=document.getElementById('status'), $img=document.getElementById('bg-img'),
+      $ui=document.getElementById('ui');
+
+$w.value=screen.width;
+$h.value=screen.height;
+
+// 3x5 pixel font
+const F={
+  '0':[7,5,5,5,7],'1':[2,6,2,2,7],'2':[7,1,7,4,7],'3':[7,1,7,1,7],
+  '4':[5,5,7,1,1],'5':[7,4,7,1,7],'6':[7,4,7,5,7],'7':[7,1,1,1,1],
+  '8':[7,5,7,5,7],'9':[7,5,7,1,7],'.':[0,0,0,0,2]
+};
+
+let PI=null, lastBlobUrl=null, debounceTimer=null, srcCanvas=null;
+
+async function loadDigits(){
+  const r=await fetch('pi_digits.txt');
+  PI=(await r.text()).trim();
+}
+
+function render(){
+  if(!PI){$status.textContent='Loading…';return;}
+  const W=+$w.value, H=+$h.value;
+  const fg=$fg.value, bg=$bg.value;
+  const cols=Math.floor(W/4), rows=Math.floor(H/6), cells=cols*rows;
+  if(cells<2){$status.textContent='Too small';return;}
+
+  const s=PI.slice(0,cells);
+  const fr=parseInt(fg.slice(1,3),16),fG=parseInt(fg.slice(3,5),16),fb=parseInt(fg.slice(5,7),16);
+  const br=parseInt(bg.slice(1,3),16),bG=parseInt(bg.slice(3,5),16),bb=parseInt(bg.slice(5,7),16);
+
+  const cv=document.createElement('canvas');
+  cv.width=W; cv.height=H;
+  const ctx=cv.getContext('2d');
+  const id=ctx.createImageData(W,H);
+  const d=id.data;
+
+  for(let i=0;i<d.length;i+=4){d[i]=br;d[i+1]=bG;d[i+2]=bb;d[i+3]=255;}
+
+  let ci=0;
+  for(let row=0;row<rows&&ci<s.length;row++){
+    for(let col=0;col<cols&&ci<s.length;col++){
+      const gl=F[s[ci++]];
+      if(!gl)continue;
+      const ox=col*4, oy=row*6;
+      for(let gy=0;gy<5;gy++){
+        const bits=gl[gy];
+        for(let gx=0;gx<3;gx++){
+          if(bits&(4>>gx)){
+            const px=ox+gx,py=oy+gy;
+            if(px<W&&py<H){
+              const j=(py*W+px)*4;
+              d[j]=fr;d[j+1]=fG;d[j+2]=fb;d[j+3]=255;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  ctx.putImageData(id,0,0);
+  srcCanvas=cv;
+
+  cv.toBlob(blob=>{
+    if(lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
+    lastBlobUrl=URL.createObjectURL(blob);
+    $img.src=lastBlobUrl;
+    $status.textContent=`${s.length} chars — ${W}×${H}`;
+  },'image/png');
+}
+
+function scheduleRender(){
+  clearTimeout(debounceTimer);
+  debounceTimer=setTimeout(render, 300);
+}
+
+// Auto-regenerate on any input change
+[$w,$h,$fg,$bg].forEach(el=>el.addEventListener('input',scheduleRender));
+
+// Save PNG
+document.getElementById('btn-save').addEventListener('click',()=>{
+  if(!lastBlobUrl)return;
+  const a=document.createElement('a');
+  a.href=lastBlobUrl;
+  a.download=`pi_${$w.value}x${$h.value}.png`;
+  a.click();
+});
+
+// Random colors — varied palettes with guaranteed contrast
+function hsl2hex(h,s,l){
+  const a=s*Math.min(l,1-l);
+  const f=n=>{const k=(n+h/30)%12; return Math.round(255*(l-a*Math.max(-1,Math.min(k-3,9-k,1))));};
+  return '#'+[f(0),f(8),f(4)].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+document.getElementById('btn-random').addEventListener('click',()=>{
+  // Pick a random scheme type for variety
+  const scheme=Math.random();
+  let fgH,fgS,fgL,bgH,bgS,bgL;
+  if(scheme<0.25){
+    // Monochrome: same hue, light on dark
+    const h=Math.random()*360;
+    fgH=h; fgS=0.6+Math.random()*0.3; fgL=0.7+Math.random()*0.2;
+    bgH=h; bgS=0.5+Math.random()*0.3; bgL=0.05+Math.random()*0.1;
+  } else if(scheme<0.5){
+    // Neutral bg: colored text on near-black/white
+    fgH=Math.random()*360; fgS=0.6+Math.random()*0.4; fgL=0.5+Math.random()*0.3;
+    bgH=fgH; bgS=0.05; bgL=Math.random()<0.5?0.03+Math.random()*0.07:0.9+Math.random()*0.08;
+    if(bgL>0.5) fgL=0.2+Math.random()*0.2; // dark text on light bg
+  } else if(scheme<0.75){
+    // Analogous: nearby hues (30–60 degree offset)
+    const h=Math.random()*360;
+    const h2=(h+30+Math.random()*30)%360;
+    fgH=h; fgS=0.7+Math.random()*0.3; fgL=0.75+Math.random()*0.15;
+    bgH=h2; bgS=0.6+Math.random()*0.3; bgL=0.08+Math.random()*0.1;
+  } else {
+    // Complementary: opposite hues
+    const h=Math.random()*360;
+    const h2=(h+150+Math.random()*60)%360;
+    fgH=h; fgS=0.5+Math.random()*0.4; fgL=0.7+Math.random()*0.2;
+    bgH=h2; bgS=0.5+Math.random()*0.4; bgL=0.08+Math.random()*0.12;
+  }
+  // 50% chance to swap fg/bg for more variety
+  if(Math.random()<0.5){
+    $fg.value=hsl2hex(bgH,bgS,bgL);
+    $bg.value=hsl2hex(fgH,fgS,fgL);
+  } else {
+    $fg.value=hsl2hex(fgH,fgS,fgL);
+    $bg.value=hsl2hex(bgH,bgS,bgL);
+  }
+  scheduleRender();
+});
+
+// Toggle UI visibility
+const $toggle=document.getElementById('btn-toggle');
+let uiVisible=true;
+$toggle.addEventListener('click',()=>{
+  uiVisible=!uiVisible;
+  $ui.classList.toggle('faded',!uiVisible);
+  // Re-show on click anywhere on the image
+  if(!uiVisible) $img.addEventListener('click',showUI,{once:true});
+});
+function showUI(){uiVisible=true;$ui.classList.remove('faded');}
+
+// Also allow tap on image to show UI when hidden
+$img.addEventListener('click',()=>{if(!uiVisible)showUI();});
+
+// Update dimensions & re-render when window moves between displays or resizes
+function updateSize(){
+  $w.value=screen.width;
+  $h.value=screen.height;
+  scheduleRender();
+}
+window.addEventListener('resize', updateSize);
+
+// Detect DPI change (display switch often changes devicePixelRatio)
+(function watchDPR(){
+  const mq=matchMedia(`(resolution: ${devicePixelRatio}dppx)`);
+  mq.addEventListener('change',()=>{updateSize(); watchDPR();},{once:true});
+})();
+
+// Magnifier loupe
+const $loupe=document.getElementById('loupe');
+const loupeCV=$loupe.querySelector('canvas');
+const loupeSize=160, zoom=10, sampleR=Math.floor(loupeSize/zoom/2);
+loupeCV.width=loupeSize; loupeCV.height=loupeSize;
+const loupeCtx=loupeCV.getContext('2d');
+loupeCtx.imageSmoothingEnabled=false;
+
+document.addEventListener('mousemove',e=>{
+  if(!srcCanvas)return;
+  // Hide loupe when over the panel
+  const panelRect=document.getElementById('panel').getBoundingClientRect();
+  if(uiVisible && e.clientX>=panelRect.left && e.clientX<=panelRect.right && e.clientY>=panelRect.top && e.clientY<=panelRect.bottom){
+    $loupe.style.display='none'; return;
+  }
+  // Map viewport coords to image coords (image is object-fit:cover, object-position:left top)
+  const vw=window.innerWidth, vh=window.innerHeight;
+  const iw=srcCanvas.width, ih=srcCanvas.height;
+  const scale=Math.max(vw/iw, vh/ih);
+  // With left-top positioning, image origin is at (0,0)
+  const ix=e.clientX/scale, iy=e.clientY/scale;
+
+  // Sample a small rect centered on cursor from source canvas
+  const sLen=loupeSize/zoom;
+  const sx=ix-sLen/2, sy=iy-sLen/2;
+  loupeCtx.clearRect(0,0,loupeSize,loupeSize);
+  loupeCtx.drawImage(srcCanvas, sx,sy,sLen,sLen, 0,0,loupeSize,loupeSize);
+
+  // Position loupe centered on cursor
+  $loupe.style.left=(e.clientX-loupeSize/2)+'px';
+  $loupe.style.top=(e.clientY-loupeSize/2)+'px';
+  $loupe.style.display='block';
+});
+
+document.addEventListener('mouseleave',()=>{$loupe.style.display='none';});
+
+// Init
+loadDigits().then(render);
+</script>
+</body>
+</html>
