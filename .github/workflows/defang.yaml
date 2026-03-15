@@ -20,7 +20,7 @@ on:
 
 jobs:
   defang:
-    name: Defang ${{ github.event.inputs.action }} ${{ github.event.inputs.stack || 'default stack' }}
+    name: Defang ${{ github.event.inputs.action || 'up' }} ${{ github.event.inputs.stack || 'default stack' }}
     environment: defang-production
     runs-on: ubuntu-latest
     permissions:
@@ -33,12 +33,12 @@ jobs:
 
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - name: Defang ${{ github.event.inputs.action }} ${{ github.event.inputs.stack || 'default stack' }}
+      - name: Defang ${{ github.event.inputs.action || 'up' }} ${{ github.event.inputs.stack || 'default stack' }}
         uses: DefangLabs/defang-github-action@v2
         with:
-          command: ${{ github.event.inputs.action }}
+          command: ${{ github.event.inputs.action || 'up' }}
           stack: ${{ github.event.inputs.stack }}
 
       - name: Deployment Summary
