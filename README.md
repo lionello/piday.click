@@ -35,6 +35,8 @@ Deploy to AWS, GCP, or Digital Ocean with [Defang](https://defang.io):
 defang compose up
 ```
 
+The Compose file uses the `x-defang-static-files` extension for serving files using CDN instead of compute.
+
 ## Files
 
 | File | Description |
