@@ -16,7 +16,7 @@ on:
           - down
       stack:
         description: "The stack to deploy up or down. (Leave blank for default)"
-        default: "awsuswest2"
+        default: ""
 
 jobs:
   defang:
@@ -39,10 +39,10 @@ jobs:
         uses: DefangLabs/defang-github-action@v2
         with:
           command: ${{ github.event.inputs.action || 'up' }}
-          stack: ${{ github.event.inputs.stack }}
+          stack: ${{ github.event.inputs.stack || 'awsuswest2' }}
 
       - name: Deployment Summary
         uses: DefangLabs/defang-github-action@v2
         with:
           command: services
-          stack: ${{ github.event.inputs.stack }}
+          stack: ${{ github.event.inputs.stack || 'awsuswest2' }}
