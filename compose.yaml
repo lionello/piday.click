@@ -1,3 +1,4 @@
+name: pi
 services:
   piday:
     domainname: piday.click
