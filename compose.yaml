@@ -1,6 +1,6 @@
 name: pi
 services:
-  piday:
+  www:
     domainname: piday.click
     build: .
     ports: ["8080:80"]
