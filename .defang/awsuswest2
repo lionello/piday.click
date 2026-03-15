@@ -1,3 +1,4 @@
+AWS_ROLE_ARN=arn:aws:iam::137359608381:role/defang-cd-CIRole
 AWS_PROFILE="nounly-staging"
 AWS_REGION="us-west-2"
 DEFANG_PROVIDER="aws"
